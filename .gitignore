@@ -1,0 +1,77 @@
+# ---------------------------------
+# 로그 파일 (Log files)
+# ---------------------------------
+*.log
+logs/
+
+# ---------------------------------
+# 모델 가중치 파일 (Model weights)
+# ---------------------------------
+*.pt
+*.pth
+*.h5
+*.weights
+*.bin
+*.onnx
+*.engine
+
+# ---------------------------------
+# 데이터 및 이미지 파일 (Data & Image files)
+# ---------------------------------
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.tiff
+*.HEIC
+# 동영상 파일
+*.mp4
+*.avi
+*.webm
+*.pkl
+*.MOV
+# 만약 데이터셋 폴더를 사용한다면
+**/dataset
+/dataset
+**/data
+/data
+
+# 결과 파일
+**/runs
+**/output
+
+# ---------------------------------
+# Python 관련 (Python specific)
+# ---------------------------------
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+env/
+.venv/
+.env
+
+# Jupyter Notebook Checkpoints
+.ipynb_checkpoints
+
+# ---------------------------------
+# IDE 및 시스템 파일 (IDE & System files)
+# ---------------------------------
+# VSCode
+.vscode/
+
+# PyCharm
+.idea/
+
+# macOS
+.DS_Store
+
+# 각종 cache 파일
+*.cache
+
+!assets/**
+CLAUDE.md

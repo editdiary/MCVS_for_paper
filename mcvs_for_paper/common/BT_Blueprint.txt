@@ -1,0 +1,82 @@
+[ROOT: Selector] (우선순위 판단)
+ │
+ ├── 0. [Sequence] 시스템 시작 대기 (Mode == IDLE)
+ │      ├── [Condition] 현재 모드가 IDLE인가?
+ │      ├── [Action]    WaitForUserConfirmation ('SYSTEM_START' 요청)
+ │      │               *사용자가 YES 하면 SUCCESS*
+ │      └── [Action]    SetMode(STANDBY) (대기 모드로 전환)
+ │
+ ├── 1. [Sequence] 수확 진행 및 사후 검증 (Mode == HARVESTING)
+ │      ├── [Condition] 현재 모드가 HARVESTING인가?
+ │      ├── [Action]    WaitForHarvestCompletion (수확 완료 신호 대기)
+ │      │               *Arm Controller가 모든 작업을 마칠 때까지 RUNNING 상태 유지*
+ │      └── [Selector]  사후 검증 및 분기 (Post Harvest Logic)
+ │             │        *앞 단계가 실패하면 다음 단계로 넘어가는 Selector 특성 활용*
+ │             │
+ │             ├── [Sequence] 1. 검증 통과 (Clean)
+ │             │      ├── [Action]    VerifyAfterHarvest (5초간 잔여물 확인)
+ │             │      │               *잔여물 발견 시 FAILURE -> Case 2로 이동*
+ │             │      ├── [Action]    WaitForUserConfirmation ('FINISH' 요청)
+ │             │      │               *"수확 완료. 대기 모드로 갈까요?"*
+ │             │      └── [Action]    SetMode(STANDBY) (Hub로 복귀)
+ │             │
+ │             ├── [Sequence] 2. 검증 실패 & 재시도 승인 (Retry)
+ │             │      ├── [Action]    WaitForUserConfirmation ('RETRY' 요청)
+ │             │      │               *"잔여물 발견. 다시 딸까요? (No: 주행 복귀)"*
+ │             │      │               *YES -> SUCCESS / NO -> FAILURE*
+ │             │      └── [Action]    ResetArmCycle (Arm 상태 리셋 -> 재수확)
+ │             │
+ │             └── [Sequence] 3. 검증 실패 & 재시도 거절 (Force Finish)
+ │                    │       *사용자가 NO를 선택한 경우 (회피)*
+ │                    └── [Action]    SetNavigationMode (주행 모드로 전환)
+ │                                    *confirmed_targets 초기화 및 오탐지 지역 이탈*
+ │
+ ├── 2. [Sequence] 수확 준비 및 사전 검증 (Mode == READY_TO_HARVEST)
+ │      ├── [Condition] 현재 모드가 READY_TO_HARVEST인가?
+ │      └── [Selector]  검증 분기 (Verify Selection)
+ │             ├── [Sequence] A. 진짜 참외임 -> 시작 (Confirm & Go)
+ │             │      ├── [Action]    VerifyHarvestAvailability (5초 정밀 검증)
+ │             │      │               *유효 타겟 확정 및 등록(confirmed_targets)*
+ │             │      ├── [Action]    WaitForUserConfirmation ('START' 요청)
+ │             │      │               *"n개 확정. 시작할까요? (No: 주행 복귀)"*
+ │             │      └── [Action]    SetMode(HARVESTING) (수확 모드 변경)
+ │             │                      *이때 Arm Controller가 모드 변경을 감지하고 동작 시작*
+ │             │
+ │             └── [Action]   B. 가짜/오탐지 혹은 사용자 거절 -> 주행 복귀
+ │                    └── [Action]    SetNavigationMode
+ │                                    *타겟 리스트 비우고 이동하여 오탐지 회피*
+ │
+ ├── 3. [Sequence] 참외 발견 및 정지 (Mode == NAVIGATING)
+ │      ├── [Condition] 현재 모드가 NAVIGATING인가? (안전 장치)
+ │      ├── [Condition] 참외가 Trigger Zone(중앙)에 들어왔는가?
+ │      ├── [Action]    SetMode(READY_TO_HARVEST) (모드 변경)
+ │      │               *(보행 프로세스가 이 모드를 보고 브레이크 작동)*
+ │      └── [Action]    EnsureRobotStopped (로봇이 완전히 멈출 때까지 대기)
+ │                      *로봇이 멈출 때까지 RUNNING 유지*
+ │
+ ├── 4. [Sequence] 주행 (Mode == NAVIGATING)
+ │      ├── [Condition] 현재 모드가 NAVIGATING인가?
+ │      ├── [Condition] 파이프가 탐지되는가? (IsPipeDetected)
+ │      └── [Action]    SetNavigationMode (주행 모드 유지 & Vision Scanning)
+ │                        *(BT는 모드만 설정하고, 실제 조향/속도 제어는 보행 프로세스가 수행)*
+ │
+ ├── 5. [Sequence] STANDBY 로직 (The Hub)
+ │      ├── [Condition] 현재 모드가 STANDBY인가?
+ │      ├── [Action]    SetVisionCommand(SCANNING) (탐색 시작)
+ │      └── [Selector]  상황별 제안 (Standby Options)
+ │             ├── [Sequence] A. Trigger Zone 감지 (최우선)
+ │             │      ├── [Condition] CheckZone('Trigger')
+ │             │      └── [Action]    SetMode(READY_TO_HARVEST) (즉시 수확 준비)
+ │             │
+ │             ├── [Sequence] B. 파이프 발견 -> 주행 제안
+ │             │      ├── [Condition] IsPipeDetected
+ │             │      ├── [Action]    WaitForUserConfirmation ('SUGGEST_NAV')
+ │             │      └── [Action]    SetNavigationMode (주행 시작)
+ │             │
+ │             └── [Sequence] C. IDLE 제안 (Fallback)
+ │                    ├── [Action]    WaitForUserConfirmation ('SUGGEST_IDLE')
+ │                    └── [Action]    SetMode(IDLE) (시스템 초기화/종료)
+ │
+ └── 6. [Sequence] 안전 정지 (Fallback)
+        └── [Action]    SetMode(STANDBY)
+                        *위의 모든 조건이 안 맞을 때(예: 주행 중 길 잃음) 제자리 정지*
