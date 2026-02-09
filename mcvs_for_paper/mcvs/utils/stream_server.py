@@ -5,7 +5,7 @@ import time
 import cv2
 import socketserver
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from utils.config import RUNTIME_OPTIONS # 리사이즈 설정값 로드
+from mcvs.utils.config import RUNTIME_OPTIONS # 리사이즈 설정값 로드
 
 # 전역 변수로 최신 프레임 공유
 output_frame = None

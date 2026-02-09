@@ -10,7 +10,7 @@ from typing import Optional, Union
 from enum import Enum
 
 # Config & Blackboard Import
-from utils.config import RUNTIME_OPTIONS, PATHS, CAM_CONFIG, ZED_CONFIG
+from mcvs.utils.config import RUNTIME_OPTIONS, PATHS, CAM_CONFIG, ZED_CONFIG
 from common.blackboard import VisionPerception
 
 class NumpyEncoder(json.JSONEncoder):

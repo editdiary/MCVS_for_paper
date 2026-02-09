@@ -3,7 +3,7 @@
 import cv2
 import numpy as np
 from typing import List, Optional
-from core.data_types import PipeResult, YoloResult
+from mcvs.core.data_types import PipeResult, YoloResult
 
 class Visualizer:
     """

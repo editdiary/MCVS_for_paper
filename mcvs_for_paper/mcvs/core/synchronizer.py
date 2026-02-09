@@ -3,7 +3,7 @@
 import time
 from collections import deque
 from typing import Optional, Dict, Any, List
-from core.data_types import FrameBundle
+from mcvs.core.data_types import FrameBundle
 
 class FrameSynchronizer:
     """

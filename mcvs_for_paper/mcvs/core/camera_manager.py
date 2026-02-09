@@ -9,7 +9,7 @@ from typing import Dict, Any, Tuple, Optional
 from abc import ABC, abstractmethod
 
 # 설정 파일 (Config)
-from utils.config import CAM_CONFIG, ZED_CONFIG, CAM_SYMBOL
+from mcvs.utils.config import CAM_CONFIG, ZED_CONFIG, CAM_SYMBOL
 
 # ==========================================
 # 1. Base Camera Node

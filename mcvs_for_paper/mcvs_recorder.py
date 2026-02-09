@@ -5,10 +5,17 @@ import os
 import threading
 import time
 import cv2
+import signal  # 추가
 from pathlib import Path
 from queue import Queue, Full, Empty
 import numpy as np
 from multiprocessing import Pool
+
+# 현재 파일(mcvs_recorder.py)의 부모 폴더(최상위 루트)를 검색 경로에 추가
+# 이렇게 하면 파이썬이 mcvs 폴더를 인식할 수 있게 됩니다.
+current_dir = Path(__file__).resolve().parent
+if str(current_dir) not in sys.path:
+    sys.path.append(str(current_dir))
 
 # Import Custom Modules
 from mcvs.utils.config import *
@@ -36,7 +43,12 @@ def save_worker(input_queue: Queue, file_saver: FileSaver, stats: StatsCollector
 
     # [개선] CPU 코어 수에 맞춰 프로세스 풀 생성 (예: 4개 코어 활용)
     # JPEG 인코딩 부하를 여러 코어로 분산합니다.
-    pool = Pool(processes=4)
+    # [수정] 자식 프로세스들이 Ctrl+C(SIGINT)를 무시하도록 초기화 설정
+    pool = Pool(
+        processes=4, 
+        initializer=signal.signal, 
+        initargs=(signal.SIGINT, signal.SIG_IGN)
+    )
 
     # 1. 이미지 모드일 때만 폴더 미리 생성
     if save_mode == "IMAGE":
