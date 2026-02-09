@@ -35,7 +35,7 @@ class _CameraNode(ABC):
         # [New] 연결 상태 관리
         self.is_connected = False
         self.last_reconnect_time = 0.0
-        self.RECONNECT_INTERVAL = 3.0  # 재연결 시도 간격 (초)
+        self.RECONNECT_INTERVAL = 10.0  # 재연결 시도 간격 (초)
 
     def initialize(self):
         """초기 연결 시도 (실패해도 에러를 띄우지 않고 넘어감)"""

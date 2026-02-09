@@ -10,7 +10,7 @@ class FrameSynchronizer:
     여러 카메라의 프레임을 타임스탬프 기준으로 동기화하는 클래스.
     Head-of-Line Blocking 방식을 사용하여 가장 오래된 프레임을 기준으로 정렬합니다.
     """
-    def __init__(self, camera_names: List[str], max_diff_sec: float = 0.06):
+    def __init__(self, camera_names: List[str], max_diff_sec: float = 0.07):
         self.camera_names = camera_names
         self.max_diff_sec = max_diff_sec
         self.queues: Dict[str, deque] = {name: deque() for name in camera_names}
