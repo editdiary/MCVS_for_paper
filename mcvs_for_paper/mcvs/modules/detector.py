@@ -1,99 +1,9 @@
 # modules/detector.py
 
-import cv2
 import numpy as np
 from ultralytics import YOLO
 from typing import List, Tuple
 from core.data_types import YoloResult
-
-class HarvestAnalyzer:
-    """
-    [Logic] 탐지된 객체가 '수확 가능한 상태'인지 판단하는 분석기
-    Vision System 내부에서 Pixel Access가 필요하므로 여기에 위치함.
-    """
-    def __init__(self, config: dict):
-        self.cfg = config 
-        # config 예시: {'harvest_zone': [0.2, 0.1, 0.8, 0.9], 'min_area': 0.05, 'ripeness_threshold': 0.6}
-
-    def analyze(self, image: np.ndarray, bbox: Tuple[int, int, int, int]) -> dict:
-        """
-        객체의 BBox와 설정을 비교하여 수확 적합성 판단 (XY축 모두 고려)
-        Return: {'is_candidate': bool, 'is_trigger': bool, 'reason': str}
-        """
-        x1, y1, x2, y2 = bbox
-        h_img, w_img, _ = image.shape
-        
-        # 중심점(Ratio) 및 면적 계산
-        cx = (x1 + x2) / 2.0
-        cy = (y1 + y2) / 2.0 # [New] Y중심
-
-        cx_ratio = cx / w_img
-        cy_ratio = cy / h_img # [New] Y비율
-
-        area = (x2 - x1) * (y2 - y1)
-        area_ratio = area / (w_img * h_img)
-        
-        # [NEW] 결과 딕셔너리 확장 (Blackboard Logic 필드 대응)
-        result = {
-            'is_candidate': False,
-            'is_trigger': False,
-            'in_harvest_zone': False,
-            'reason': "Ready"
-        }
-
-        # 1. Harvest Zone Check (XY축 검사)
-        hx_min = self.cfg.get('zone_x_min', 0.0)
-        hx_max = self.cfg.get('zone_x_max', 1.0)
-        hy_min = self.cfg.get('zone_y_min', 0.0) # [New]
-        hy_max = self.cfg.get('zone_y_max', 1.0) # [New]
-
-        # [Logic] XY 모두 만족해야 Zone In
-        is_x_ok = (hx_min <= cx_ratio <= hx_max)
-        is_y_ok = (hy_min <= cy_ratio <= hy_max)
-
-        # Zone 안에 있는지 먼저 체크하여 플래그 설정
-        if is_x_ok and is_y_ok:
-            result['in_harvest_zone'] = True
-        else:
-            result['reason'] = "Out of Harvest Zone"
-            return result # Zone 밖이면 바로 리턴 (Candidate 탈락)
-        
-        # 2. Size Check
-        if area_ratio < self.cfg.get('min_area_ratio', 0.005):
-            result['reason'] = "Too Small"
-            return result
-        
-        # [통과] Zone 안에 있고 크기도 적절함 -> 수확 후보 인정
-        result['is_candidate'] = True
-
-        # 3. Trigger Zone Check (XY축 정밀 검사)
-        tx_min = self.cfg.get('trigger_x_min', 0.45)
-        tx_max = self.cfg.get('trigger_x_max', 0.55)
-        ty_min = self.cfg.get('trigger_y_min', 0.0) # [New]
-        ty_max = self.cfg.get('trigger_y_max', 1.0) # [New]
-
-        is_tx_ok = (tx_min <= cx_ratio <= tx_max)
-        is_ty_ok = (ty_min <= cy_ratio <= ty_max)
-        
-        if is_tx_ok and is_ty_ok:
-            result['is_trigger'] = True
-            result['reason'] = "Triggered!"
-        
-        return result
-
-    # [TODO] 추후에는 색상 검증도 도입할까 고민 중
-    # def _calculate_yellowness(self, roi_bgr: np.ndarray) -> float:
-    #     """HSV 색공간을 이용해 노란색 픽셀 비율 계산"""
-    #     hsv = cv2.cvtColor(roi_bgr, cv2.COLOR_BGR2HSV)
-    #     # 노란색 범위 (H: 20~35 정도가 참외색에 가까움, 튜닝 필요)
-    #     lower_yellow = np.array([15, 100, 100])
-    #     upper_yellow = np.array([35, 255, 255])
-        
-    #     mask = cv2.inRange(hsv, lower_yellow, upper_yellow)
-    #     yellow_pixels = cv2.countNonZero(mask)
-    #     total_pixels = roi_bgr.shape[0] * roi_bgr.shape[1]
-        
-    #     return yellow_pixels / total_pixels if total_pixels > 0 else 0.0
 
 class YoloDetector:
     """
@@ -114,7 +24,7 @@ class YoloDetector:
             # 1차 시도: 설정된 경로(.engine) 로드
             self.model = YOLO(weights_path, task='detect')
             
-            # [핵심 수정] 로드 직후 강제로 한 번 실행해봄 (여기서 에러가 나야 try-except가 잡음)
+            # 로드 직후 강제로 한 번 실행해봄 (여기서 에러가 나야 try-except가 잡음)
             print("[Detector] 엔진 무결성 검사 중...")
             self.model(dummy_img, verbose=False) 
             

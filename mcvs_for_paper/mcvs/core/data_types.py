@@ -23,23 +23,6 @@ class YoloResult:
     conf: float
     bbox: Tuple[int, int, int, int]     # (x1, y1, x2, y2) Pixel 좌표
     track_id: Optional[str] = None
-    
-    # [New] 분석 결과 (Optional)
-    # 내용: {'is_candidate': bool, 'is_trigger': bool, 'reason': str}
-    analysis: Optional[dict] = None
-
-@dataclass
-class PipeResult:
-    """[Internal] 파이프 라인 탐지 원본 결과"""
-    roi_coords: Optional[Dict[str, int]] = None
-
-    track_point: Optional[Dict[str, int]] = None
-    track_point_ratio: Optional[float] = None
-
-    # [New] 상세 분석 정보 (Pixel 단위)
-    angle: float = 0.0
-    start_point: Optional[Tuple[int, int]] = None  # (x, y) - 이미지 하단
-    end_point: Optional[Tuple[int, int]] = None    # (x, y) - 이미지 상단
 
 @dataclass
 class ProcessingResult:
@@ -54,8 +37,6 @@ class ProcessingResult:
     # [Mod] 변경 후: 카메라 이름을 키로 갖는 딕셔너리
     # 예: {'left': [res1, res2], 'right': [res3]}
     yolo_detections: Dict[str, List[YoloResult]]
-
-    pipe_result: PipeResult
 
     # 시각화(Annotated) 이미지 저장용
     annotated_left: Optional[np.ndarray] = None
