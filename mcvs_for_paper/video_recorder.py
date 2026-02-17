@@ -24,6 +24,7 @@ from mcvs.core.camera_manager import CameraManager
 from mcvs.core.synchronizer import FrameSynchronizer
 from mcvs.utils.file_io import FileSaver
 from mcvs.utils.stats_collector import StatsCollector, start_stats_logging_thread
+from mcvs.utils.stream_server import StreamingServer
 
 # 전역 종료 이벤트
 SHUTDOWN_EVENT = threading.Event()
@@ -33,7 +34,8 @@ def _write_image_task(args):
     file_path, img, quality = args
     cv2.imwrite(file_path, img, [cv2.IMWRITE_PNG_COMPRESSION, quality])
 
-def save_worker(input_queue: Queue, file_saver: FileSaver, stats: StatsCollector, save_mode: str):
+def save_worker(input_queue: Queue, file_saver: FileSaver,
+                stats: StatsCollector, save_mode: str, streamer: StreamingServer):
     """
     [Consumer] save_mode에 따라 이미지, 동영상 저장 또는 로그만 기록합니다.
     """
@@ -88,6 +90,14 @@ def save_worker(input_queue: Queue, file_saver: FileSaver, stats: StatsCollector
             # 이 부분은 save_mode가 "NONE"이어도 항상 실행됩니다.
             file_saver.append_csv_log(temp_result)
             stats.log_sync_event(True)
+
+            # [Add] 웹 스트리밍 뷰어 업데이트
+            if streamer:
+                streamer.update_frames(
+                    img_left=bundle.images.get('left'),
+                    img_zed=bundle.images.get('zed_l'),
+                    img_right=bundle.images.get('right')
+                )
 
         except Empty:
             continue
@@ -146,6 +156,16 @@ def main():
 
         camera_manager.print_settings()
 
+        # [Add] 제거했던 스트리밍 서버(뷰파인더) 기능 복구
+        streamer = None
+        if RUNTIME_OPTIONS.get('enable_stream_server', True):
+            try:
+                streamer = StreamingServer(host='0.0.0.0', port=50020)
+                streamer.start()
+                print("[Main] 📺 실시간 웹 뷰어 실행 완료! (포트: 50020)")
+            except Exception as e:
+                print(f"[Main] ⚠️ 스트리밍 서버 시작 실패: {e}")
+
     except Exception as e:
         print(f"\n[Init] ❌ 초기화 치명적 실패: {e}")
         return
@@ -153,7 +173,7 @@ def main():
     # 2. 저장 워커 스레드 시작
     t_save = threading.Thread(
         target=save_worker, 
-        args=(save_queue, file_saver, stats, SAVE_MODE), 
+        args=(save_queue, file_saver, stats, SAVE_MODE, streamer), 
         daemon=True
     )
     t_save.start()
@@ -183,17 +203,23 @@ def main():
             if bundle := synchronizer.get_synced_bundle():
                 current_time = time.time()
 
-                # C. 저장 주기 판단 (현재 시간 - 마지막 저장 시간 >= 설정 간격)
-                if current_time - last_save_time >= SAVE_INTERVAL:
+                # C. 저장 모드에 따른 분기 처리
+                if SAVE_MODE == "VIDEO" or SAVE_MODE == "NONE":
+                    # [Mod] 동영상은 15FPS가 유지되어야 하므로 들어오는 모든 프레임을 저장
                     try:
-                        # 저장 큐로 전달
                         save_queue.put(bundle, block=False)
-                        last_save_time = current_time   # 저장 시점 업데이트
-                    except Full: 
-                        pass    # 저장 속도가 느릴 경우 프레임 드랍 (최신성 유지)
-                else:
-                    # 저장 주기가 아니면 번들을 그냥 버림 (메모리 해제)
-                    pass
+                    except Full:
+                        pass    # 큐가 꽉 차면 Drop (최신성 유지)
+                
+                elif SAVE_MODE == "IMAGE":
+                    # [Mod] 이미지 모드는 설정한 주기(SAVE_INTERVAL)마다 한 번씩만 통과시킴
+                    if current_time - last_save_time >= SAVE_INTERVAL:
+                        try:
+                            # 저장 큐로 전달
+                            save_queue.put(bundle, block=False)
+                            last_save_time = current_time   # 저장 시점 업데이트
+                        except Full: 
+                            pass    # 저장 속도가 느릴 경우 프레임 드랍 (최신성 유지)
             else:
                 # 데이터가 없을 때는 살짝 대기하여 CPU 과점유 방지
                 time.sleep(0.001)
