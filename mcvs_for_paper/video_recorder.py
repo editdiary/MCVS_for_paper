@@ -19,7 +19,7 @@ if str(current_dir) not in sys.path:
 
 # Import Custom Modules
 from mcvs.utils.config import *
-from mcvs.core.data_types import FrameBundle, ProcessingResult, PipeResult
+from mcvs.core.data_types import FrameBundle, ProcessingResult
 from mcvs.core.camera_manager import CameraManager
 from mcvs.core.synchronizer import FrameSynchronizer
 from mcvs.utils.file_io import FileSaver
@@ -65,8 +65,7 @@ def save_worker(input_queue: Queue, file_saver: FileSaver,
             # FileSaver 호환성을 위해 ProcessingResult 생성
             temp_result = ProcessingResult(
                 bundle=bundle, 
-                yolo_detections={}, 
-                pipe_result=PipeResult()
+                yolo_detections={}
             )
 
             # 2. 미디어(이미지/동영상) 저장 분기
@@ -115,7 +114,7 @@ def main():
     # "VIDEO" : 동영상(.mp4) 저장
     # "NONE"  : 미디어 저장 안 함 (CSV 로그만 기록)
     # ==========================================
-    SAVE_MODE = "IMAGE"  
+    SAVE_MODE = "VIDEO"  
     SAVE_INTERVAL = 2.0
     last_save_time = 0.0  # [추가] 초기값 설정 필요
 
@@ -125,7 +124,12 @@ def main():
     # 동영상 모드일 경우 필요한 설정
     if SAVE_MODE == "VIDEO":
         RUNTIME_OPTIONS['video_save'] = True
-        RUNTIME_OPTIONS['video_channels'] = {'left': True, 'right': True, 'zed': True, 'combined': True}
+        RUNTIME_OPTIONS['video_channels'] = {
+            'left': False,
+            'right': True,
+            'zed': False,
+            'combined': False
+            }
     else:
         RUNTIME_OPTIONS['video_save'] = False
 
@@ -234,6 +238,10 @@ def main():
             print("[Shutdown] 카메라 정지 중...")
             # 카메라가 이미 죽어있을 때 여기서 오래 걸릴 수 있음
             camera_manager.stop_all()
+
+            # [추가] 저장 스레드가 남은 프레임을 모두 파일에 쓸 때까지 대기
+            print("[Shutdown] 남은 프레임 저장 대기 중...")
+            t_save.join(timeout=5.0)
             
             print("[Shutdown] 파일 저장 마무리 중...")
             file_saver.close()

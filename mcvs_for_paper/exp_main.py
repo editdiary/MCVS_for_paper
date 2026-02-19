@@ -5,6 +5,7 @@ import os
 import threading
 import time
 from typing import Tuple
+import csv
 from pathlib import Path
 from queue import Queue, Full, Empty
 
@@ -40,35 +41,41 @@ def inference_worker(input_queue: Queue, output_queue: Queue,
     """
     print("[Inference] 추론 스레드 시작 (Ready)")
 
+    # [Add] DLA 실험 데이터를 모아둘 리스트 생성
+    latency_log = []
+    frame_count = 0
+
     while not SHUTDOWN_EVENT.is_set():
         try:
             bundle: FrameBundle = input_queue.get(timeout=1.0)
             yolo_results_dict = {}
 
             # =========================================================
-            # 1. Object Detection (GPU) - Batch Inference 적용
+            # [수정] Batch Inference 대신 '개별 추론'으로 변경
+            # (Tracker ID 꼬임 방지 및 len() 에러 해결)
             # =========================================================
-            batch_images = []
-            batch_keys = []
-
             for cam_name in DETECTION_TARGETS:
                 img = bundle.images.get(cam_name)
                 if img is not None and img.size > 0:
-                    batch_images.append(img)
-                    batch_keys.append(cam_name)
-                
-            if batch_images:
-                try:
-                    batch_results = detector.track(batch_images)
+                    try:
+                        # [Add] 정밀한 추론 시간 측정 시작
+                        start_time = time.perf_counter()
 
-                    for i, dets in enumerate(batch_results):
-                        cam_key = batch_keys[i]
-                        yolo_results_dict[cam_key] = dets
+                        # 이미지를 하나씩 넣어서 리스트 형태(List[YoloResult])로 정확히 반환받음
+                        dets = detector.track(img)
 
-                except Exception as e:
-                    print(f"[Inference] ⚠️ 배치 추론 에러: {e}")
-        
-            # [Step 2] 결과 패키징
+                        # [Add] 추론 시간 측정 종료 및 출력 (밀리초 단위)
+                        end_time = time.perf_counter()
+                        infer_time_ms = (end_time - start_time) * 1000
+                        # 리스트에 (프레임 번호, 카메라 이름, 추론 시간) 저장
+                        latency_log.append((frame_count, cam_name, round(infer_time_ms, 3)))
+
+                        yolo_results_dict[cam_name] = dets
+                    except Exception as e:
+                        print(f"[Inference] ⚠️ 추론 에러 ({cam_name}): {e}")
+            
+            frame_count += 1
+
             result = ProcessingResult(
                 bundle=bundle,
                 yolo_detections=yolo_results_dict
@@ -82,7 +89,22 @@ def inference_worker(input_queue: Queue, output_queue: Queue,
             print(f"[Inference] ❌ 스레드 에러: {e}")
             if SHUTDOWN_EVENT.is_set(): break
 
-    print("[Inference] 스레드 종료.")
+    #print("[Inference] 스레드 종료.")
+
+    # 스레드 종료 시점에 모아둔 데이터를 CSV 파일로 한 번에 저장
+    print("[Inference] 스레드 종료. 실험 데이터(추론 시간)를 저장합니다...")
+    try:
+        # 엔진 이름이나 시간에 따라 파일명을 다르게 주면 비교하기 좋습니다.
+        log_filename = f"inference_latency_log_{int(time.time())}.csv" 
+        
+        with open(log_filename, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow(['frame_index', 'camera_name', 'latency_ms']) # 헤더 작성
+            writer.writerows(latency_log) # 데이터 한 번에 쓰기
+            
+        print(f"[Inference] ✅ 추론 시간 로그 저장 완료: {log_filename}")
+    except Exception as e:
+        print(f"[Inference] ❌ 로그 저장 실패: {e}")
 
 def _create_perception_data(result: ProcessingResult) -> Tuple[VisionPerception, bool]:
     """
@@ -125,7 +147,6 @@ def _create_perception_data(result: ProcessingResult) -> Tuple[VisionPerception,
                 area_ratio=(w * h) / (img_w * img_h)
             )
         
-            analysis = d.analysis if d.analysis else {}
             logic_data = ObjectLogic(
                 is_candidate=False,
                 is_in_trigger_zone=False,

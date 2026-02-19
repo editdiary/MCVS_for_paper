@@ -3,7 +3,7 @@
 import numpy as np
 from ultralytics import YOLO
 from typing import List, Tuple
-from core.data_types import YoloResult
+from mcvs.core.data_types import YoloResult
 
 class YoloDetector:
     """
